@@ -2,6 +2,8 @@
 
 This script downloads all files in your CloudApp account for archival purposes.
 
+Updated 2016-09-18 to allow for unlimited backups (previously set to 50) working in batches of 100 at a time.
+
 ## Installation
 
     git clone --recursive git://github.com/onecrayon/cloudapp-archiver.git
