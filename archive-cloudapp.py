@@ -51,59 +51,63 @@ if not os.path.exists(rootPath):
 	print("Error: output folder does not exist; please check your path")
 	sys.exit(2)
 
-# Time to recurse through the list and download everything!
-url = 'http://my.cl.ly/v3/items?per_page=50'
-response = requests.get(url, auth=HTTPDigestAuth(username, password), headers={'Accept': 'application/json'})
-while response is not None and response.status_code == requests.codes.ok:
-	json = response.json()
-	for item in json["data"]:
-		localFolder = os.path.join(item["created_at"][0:10], item["slug"])
-		folderPath = os.path.join(rootPath, localFolder)
-		try:
-			os.makedirs(folderPath)
-		except:
-			# Skip items that already exist, since we presumably downloaded them in the past
-			print("Skipping " + localFolder + " (already exists)")
-			continue
-		# Secondary request to download the file itself
-		if item["remote_url"] is not None:
-			r = requests.get(item["remote_url"], stream=True)
-			name = item["name"]
-			# Make sure the name doesn't include colons or slashes
-			name = name.replace(':', '-')
-			name = name.replace('/', '-')
-			name = name.replace('\\', '-')
-			filePath = os.path.join(folderPath, name)
-			# Ensure we have a file extension
-			ext = os.path.splitext(filePath)[-1]
-			if ext is "":
-				ext = os.path.splitext(item["remote_url"])[-1]
-				if ext is not "":
-					filePath += ext
-			if r.status_code == requests.codes.ok:
-				print("Downloading " + os.path.join(localFolder, name) + ' ...')
-				with open(filePath, 'wb') as f:
-					for chunk in r.iter_content(1024):
-						f.write(chunk)
+	
+for c in range(200):
+	perPage = c * 100
+	print ("Processing page " + str(c) + "; items from: " + str(c*100 - 100) + " to " + str(c*100))
+	# Time to recurse through the list and download everything!
+	url = 'http://my.cl.ly/v3/items?per_page=' + str(perPage)
+	response = requests.get(url, auth=HTTPDigestAuth(username, password), headers={'Accept': 'application/json'})
+	while response is not None and response.status_code == requests.codes.ok:
+		json = response.json()
+		for item in json["data"]:
+			localFolder = os.path.join(item["created_at"][0:10], item["slug"])
+			folderPath = os.path.join(rootPath, localFolder)
+			try:
+				os.makedirs(folderPath)
+			except:
+				# Skip items that already exist, since we presumably downloaded them in the past
+				print("Skipping " + localFolder + " (already exists)")
+				continue
+			# Secondary request to download the file itself
+			if item["remote_url"] is not None:
+				r = requests.get(item["remote_url"], stream=True)
+				name = item["name"]
+				# Make sure the name doesn't include colons or slashes
+				name = name.replace(':', '-')
+				name = name.replace('/', '-')
+				name = name.replace('\\', '-')
+				filePath = os.path.join(folderPath, name)
+				# Ensure we have a file extension
+				ext = os.path.splitext(filePath)[-1]
+				if ext is "":
+					ext = os.path.splitext(item["remote_url"])[-1]
+					if ext is not "":
+						filePath += ext
+				if r.status_code == requests.codes.ok:
+					print("Downloading " + os.path.join(localFolder, name) + ' ...')
+					with open(filePath, 'wb') as f:
+						for chunk in r.iter_content(1024):
+							f.write(chunk)
+				else:
+					# Failed to download for some reason, so delete the folder so we can try again in the future
+					print("Error: failed to download " + os.path.join(localFolder, name))
+					os.rmdir(folderPath)
+			elif item["redirect_url"] is not None:
+				# We have a URL; create an IE-style .url file (which also works in Safari)
+				print("Writing shortcut <" + item["redirect_url"] + "> ...")
+				filePath = os.path.join(folderPath, 'shortcut.url')
+				f = open(filePath, 'w')
+				f.write("[InternetShortcut]\nURL=" + item["redirect_url"] + "\n")
+				f.close()
 			else:
-				# Failed to download for some reason, so delete the folder so we can try again in the future
-				print("Error: failed to download " + os.path.join(localFolder, name))
+				print("Error: failed to process item: " + json.dumps(item))
 				os.rmdir(folderPath)
-		elif item["redirect_url"] is not None:
-			# We have a URL; create an IE-style .url file (which also works in Safari)
-			print("Writing shortcut <" + item["redirect_url"] + "> ...")
-			filePath = os.path.join(folderPath, 'shortcut.url')
-			f = open(filePath, 'w')
-			f.write("[InternetShortcut]\nURL=" + item["redirect_url"] + "\n")
-			f.close()
+		# Now that we've downloaded all the files, check for our next URL
+		if "links" in json and "next_url" in json["links"]:
+			url = json["links"]["next_url"]["href"]
+			response = requests.get(url, auth=HTTPDigestAuth(username, password), headers={'Accept': 'application/json'})
 		else:
-			print("Error: failed to process item: " + json.dumps(item))
-			os.rmdir(folderPath)
-	# Now that we've downloaded all the files, check for our next URL
-	if "links" in json and "next_url" in json["links"]:
-		url = json["links"]["next_url"]["href"]
-		response = requests.get(url, auth=HTTPDigestAuth(username, password), headers={'Accept': 'application/json'})
-	else:
-		response = None
+			response = None
 
 print("All done!")
